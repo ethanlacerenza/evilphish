@@ -1,0 +1,24 @@
+{
+  "evilginx_db_path": "/root/.evilginx/data.db",
+
+  "poll_interval_seconds": 5,
+  "rid_query_param": "rid",
+
+  "gophish_api_base_url": "http://127.0.0.1:3332",
+  "gophish_api_key": "PUT-YOUR-GOPHISH-API-KEY-HERE",
+  "gophish_insecure_tls": false,
+  "campaign_cache_seconds": 30,
+
+  "gophish_phish_url": "http://127.0.0.1:8080",
+
+  "form_field_mapping": {
+    "username": "{{username}}",
+    "password": "{{password}}",
+    "tokens": "{{tokens}}"
+  },
+  "submit_user_agent_fallback": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+  "submit_insecure_tls": false,
+
+  "state_file_path": "bridge-state.json",
+  "dry_run": true
+}
