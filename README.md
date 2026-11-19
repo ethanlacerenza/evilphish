@@ -319,3 +319,8 @@ credentials, and capture a session cookie.
 - `state.go` — forwarded-state persistence (idempotency)
 - `config.example.json` — configuration template
 - `test-rig/` — fake login target + phishlet for safe end-to-end testing
+
+
+## License
+This project is licensed under the GNU General Public License v3.0.
+See the [LICENSE](LICENSE) file for the full text.

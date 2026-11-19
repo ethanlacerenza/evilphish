@@ -1,3 +1,18 @@
+// evilphish — bridges evilginx3 captures into gophish
+// Copyright (C) 2026  Ethan Lacerenza
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 package main
 
 import (
@@ -23,10 +38,10 @@ type Config struct {
 	RidQueryParam string `json:"rid_query_param"` // default "rid"
 
 	// --- gophish side -----------------------------------------------
-	GophishAPIBaseURL   string `json:"gophish_api_base_url"` // e.g. https://127.0.0.1:3333
-	GophishAPIKey       string `json:"gophish_api_key"`
-	GophishInsecureTLS  bool   `json:"gophish_insecure_tls"` // true if gophish admin uses a self-signed cert
-	CampaignCacheSeconds int   `json:"campaign_cache_seconds"`
+	GophishAPIBaseURL    string `json:"gophish_api_base_url"` // e.g. https://127.0.0.1:3333
+	GophishAPIKey        string `json:"gophish_api_key"`
+	GophishInsecureTLS   bool   `json:"gophish_insecure_tls"` // true if gophish admin uses a self-signed cert
+	CampaignCacheSeconds int    `json:"campaign_cache_seconds"`
 
 	// GophishPhishURL is where captured logins are POSTed to make them
 	// appear as native "Submitted Data" in gophish. This must be gophish's
