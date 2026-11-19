@@ -1,6 +1,8 @@
+<p align="center">
+  <img src="media/img/evilphish_logo.png" width="500" alt="evilphish logo">
+</p>
 
-
-# evilphish
+# Evilphish
 
 An external bridge, written in Go, that forwards credentials captured by
 **evilginx3** into **gophish** so they appear as native **Submitted Data**
