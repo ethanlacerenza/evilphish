@@ -1,3 +1,5 @@
+
+
 # evilphish
 
 An external bridge, written in Go, that forwards credentials captured by
@@ -180,6 +182,7 @@ You should see lines like:
 ```
 [DRY RUN] would POST to http://127.0.0.1:8080?rid=XXXX campaign="user@org"(175) recipient=user@org fields=map[password:[...] tokens:[...] username:[...]]
 ```
+<img width="917" height="110" alt="image" src="https://github.com/user-attachments/assets/e12932aa-9373-494f-8f23-fbfc3d7067fb" />
 
 When the target and recipient look right, go live:
 
@@ -200,6 +203,10 @@ session 212: forwarded capture for recipient user@org into campaign 175
 
 Check gophish → that campaign → the recipient's timeline: **Clicked Link**
 and **Submitted Data** (with the captured fields) should appear.
+
+
+<img width="987" height="456" alt="image" src="https://github.com/user-attachments/assets/c541f34f-b82c-4015-bd08-1970e4536f70" />
+
 
 ### Run it as a service (optional)
 
