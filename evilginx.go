@@ -86,8 +86,8 @@ type RESPAOFSource struct {
 	Path string
 }
 
-func NewRESPAOFSource(cfg Config) *RESPAOFSource {
-	return &RESPAOFSource{Path: cfg.EvilginxDBPath}
+func NewRESPAOFSource(dbPath string) *RESPAOFSource {
+	return &RESPAOFSource{Path: dbPath}
 }
 
 var sessionKeyRe = regexp.MustCompile(`^sessions:(\d+)$`)
