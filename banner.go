@@ -24,44 +24,99 @@ import (
 
 const VERSION = "2.0.0"
 
-// sharkArt is a pixel grid traced from the evilphish logo (dorsal fin, pointed
-// snout, toothy grin):
+// sharkPix is a pixel grid traced from the evilphish logo. It is rendered with
+// half-block characters (two pixel rows per text line) for high fidelity, so
+// the dorsal fin, pointed snout, red eyes and toothy grin all come through.
 //
-//	#  = shark body / teeth  (rendered as a solid block)
-//	o  = eyes                (rendered red)
-//	_  = background          (space)
-const sharkArt = `
-_______________________________##_________________________
-_____________________________####_________________________
-___________________________#####__________________________
-_________________________#######__________________________
-_______________________###########________________________
-_________________#######################__________________
-_______________###########################________________
-_____________####ooo__oo#########o__ooo#####______________
-_________##_#####oooooooo#######ooooooo######_##__________
-______#####_##__###oooo##########oooo####_###_####________
-____#######_###___#____#____#____#___#___###__######______
-_________###_###_###__##___##___##___###_##_###___________
-___________##__###_#_####_####_####_#__###_##_____________
-_________________####______________#####__________________
-`
+//	#  = shark body / teeth   (white silhouette)
+//	o  = eyes                 (red)
+//	_  = background           (blank)
+const sharkPix = `
+___________________________________##___________________________
+__________________________________###___________________________
+________________________________#####___________________________
+________________________________#####___________________________
+_______________________________#####____________________________
+______________________________#####_____________________________
+____________________________#######_____________________________
+___________________________########_____________________________
+__________________________#########_____________________________
+_________________________##########_____________________________
+_________________________#############__________________________
+_______________________#################________________________
+___________________#########################____________________
+_________________############################___________________
+________________###############################_________________
+_______________##################################_______________
+______________#####ooo####################ooo#####______________
+_____________#####ooooo##################ooooo#####_____________
+____________######ooo___o##############o___ooo######____________
+________#__######oooo___ooo##########ooo___oooo######__#________
+_______##_#######oooo__Hooo##########oooH__oooo#######_##_______
+______###_#######ooooooooo############ooooooooo#######_###______
+_____####_########oo_ooooo############ooooo_oo########_####_____
+____#####_###__####oooooo##############oooooo####__###_#####____
+___######_####____############################____####_######___
+__#######_####_____##########################_____####_#######__
+#########___###___##________________________##___###___#########
+_#########__###___##____#_____####_____#____##___###__#########_
+_______####_####_####___##____####____##___####_####_####_______
+________###__###_####__###___######___###__####_###__###________
+_________###__###_###_#####__######__#####_###_###__###_________
+__________##__####__#######_########_#######__####__##__________
+___________#___####_____################_____####___#___________
+________________####_______##########_______####________________
+_________________######__________________######_________________
+____________________######____________######____________________
+________________________################________________________
+________________________________________________________________`
 
+func inkFg(c byte) color.Attribute {
+	if c == 'o' {
+		return color.FgHiRed
+	}
+	return color.FgHiWhite
+}
+
+func inkBg(c byte) color.Attribute {
+	if c == 'o' {
+		return color.BgHiRed
+	}
+	return color.BgHiWhite
+}
+
+// printShark renders the grid two rows at a time using the upper/lower
+// half-block glyphs, doubling vertical resolution.
 func printShark() {
-	body := color.New(color.FgHiWhite) // bright silhouette
-	eye := color.New(color.FgHiRed)    // glowing red eyes
-	const block = "█"
-
-	for _, line := range strings.Split(strings.Trim(sharkArt, "\n"), "\n") {
+	rows := strings.Split(strings.Trim(sharkPix, "\n"), "\n")
+	width := 0
+	for _, r := range rows {
+		if len(r) > width {
+			width = len(r)
+		}
+	}
+	for i, r := range rows {
+		if len(r) < width {
+			rows[i] = r + strings.Repeat("_", width-len(r))
+		}
+	}
+	if len(rows)%2 == 1 {
+		rows = append(rows, strings.Repeat("_", width))
+	}
+	for r := 0; r < len(rows); r += 2 {
+		top, bot := rows[r], rows[r+1]
 		var b strings.Builder
-		for _, c := range line {
-			switch c {
-			case '#':
-				b.WriteString(body.Sprint(block))
-			case 'o':
-				b.WriteString(eye.Sprint(block))
+		for i := 0; i < width; i++ {
+			t, d := top[i], bot[i]
+			switch {
+			case t == '_' && d == '_':
+				b.WriteByte(' ')
+			case d == '_':
+				b.WriteString(color.New(inkFg(t)).Sprint("▀")) // upper half
+			case t == '_':
+				b.WriteString(color.New(inkFg(d)).Sprint("▄")) // lower half
 			default:
-				b.WriteString(" ")
+				b.WriteString(color.New(inkFg(t), inkBg(d)).Sprint("▀"))
 			}
 		}
 		fmt.Fprintln(color.Output, b.String())
@@ -78,9 +133,8 @@ func Banner() {
 	printShark()
 	fmt.Fprintln(color.Output)
 
-	fmt.Fprintf(color.Output, "              %s%s\n",
-		red.Sprint("evilphish"), gray.Sprint("  —  how much is the phish?"))
-
-	fmt.Fprintf(color.Output, "   %s%s\n\n",
+	fmt.Fprintf(color.Output, "                 %s%s\n",
+		red.Sprint("evilphish"), gray.Sprint("  —  blood in the water"))
+	fmt.Fprintf(color.Output, "      %s%s\n\n",
 		gray.Sprint("evilginx3 → gophish bridge        version "), green.Sprint(VERSION))
 }
