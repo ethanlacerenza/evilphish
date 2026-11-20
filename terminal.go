@@ -48,6 +48,7 @@ func completer() *readline.PrefixCompleter {
 			readline.PcItem("state_file"),
 			readline.PcItem("useragent"),
 			readline.PcItem("submit_insecure", readline.PcItem("true"), readline.PcItem("false")),
+			readline.PcItem("log_plaintext", readline.PcItem("true"), readline.PcItem("false")),
 			readline.PcItem("mapping",
 				readline.PcItem("username"), readline.PcItem("password"), readline.PcItem("tokens")),
 		),
@@ -246,6 +247,21 @@ func (t *Terminal) handleConfig(args []string) {
 			t.saved("submit insecure-tls", true)
 			return
 		}
+	case "log_plaintext":
+		if len(args) == 2 {
+			b, ok := parseBool(args[1])
+			if !ok {
+				t.err("usage: config log_plaintext true|false")
+				return
+			}
+			t.cfg.SetLogPlaintext(b)
+			if b {
+				t.warn("log_plaintext ON — captured credentials and emails will be written to logs in CLEARTEXT")
+			} else {
+				t.ok("log_plaintext OFF — logs redact captured credentials and emails (default)")
+			}
+			return
+		}
 	case "mapping":
 		// config mapping <field> <template...>   (empty template = delete)
 		if len(args) >= 2 {
@@ -320,7 +336,7 @@ func (t *Terminal) printConfig() {
 		"gophish api url", "gophish api key", "gophish insecure",
 		"gophish phish url", "campaign cache",
 		"submit insecure", "submit user-agent",
-		"state file", "dry run",
+		"log plaintext", "state file", "dry run",
 	}
 	vals := []string{
 		s.EvilginxDBPath,
@@ -333,6 +349,7 @@ func (t *Terminal) printConfig() {
 		fmt.Sprintf("%ds", s.CampaignCacheSeconds),
 		strconv.FormatBool(s.SubmitInsecureTLS),
 		s.SubmitUserAgentFallback,
+		logPlaintextColor(s.LogPlaintext),
 		s.StateFilePath,
 		boolColor(s.DryRun, "on (safe)", "OFF (live!)"),
 	}
@@ -435,6 +452,7 @@ func (t *Terminal) printHelp() {
                              placeholders: {{username}} {{password}} {{tokens}}
                              {{session_id}} {{phishlet}} {{remote_addr}} {{update_time}}
                              (empty template removes the mapping)
+  %s  log captured creds/emails in cleartext (default off = redacted)
 
 %s
   %s                simulate: log captures, never send   (default ON)
@@ -462,6 +480,7 @@ func (t *Terminal) printHelp() {
 		d("config poll <seconds>"),
 		d("config rid_param <name>"),
 		d("config mapping <field> <tmpl>"),
+		d("config log_plaintext true|false"),
 		h("MODE"),
 		d("dryrun on"),
 		d("dryrun off"),
@@ -514,6 +533,15 @@ func boolColor(v bool, onText, offText string) string {
 		return color.HiGreenString(onText)
 	}
 	return color.HiRedString(offText)
+}
+
+// logPlaintextColor renders the log-redaction setting, colouring the risky
+// "plaintext on" state red and the safe redacted default green.
+func logPlaintextColor(plaintext bool) string {
+	if plaintext {
+		return color.HiRedString("ON (cleartext!)")
+	}
+	return color.HiGreenString("off (redacted)")
 }
 
 func parseBool(s string) (bool, bool) {

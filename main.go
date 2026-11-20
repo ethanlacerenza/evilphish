@@ -100,8 +100,8 @@ func runInteractive(cfg *Config) {
 	term.DoWork()
 }
 
-// runHeadless replicates the old daemon behaviour: start forwarding and block
-// forever. Requires a complete config.
+// runHeadless starts the forwarder and blocks forever, for systemd/unattended
+// use. It requires a complete config.
 func runHeadless(cfg *Config) {
 	ready, missing := cfg.Ready()
 	if !ready {

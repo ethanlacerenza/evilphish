@@ -58,5 +58,7 @@ func (s *State) Save(path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, b, 0o600)
+	// Atomic write: a torn state file on crash could re-send already-forwarded
+	// captures into gophish, so never expose a partially written file.
+	return atomicWriteFile(path, b, 0o600)
 }

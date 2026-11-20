@@ -47,6 +47,7 @@ type Poller struct {
 
 	mu      sync.Mutex
 	cancel  context.CancelFunc
+	done    chan struct{} // closed by loop() when it has fully exited
 	running bool
 
 	// runtime, (re)built on Start from a config snapshot
@@ -77,10 +78,10 @@ func (p *Poller) Stats() PollerStats {
 	return s
 }
 
-// Start builds the data source + gophish client from the current config and
+// Start builds the data source and gophish client from the current config and
 // launches the background loop. Connection-level config (gophish url/key/tls,
-// evilginx db path, state file) is captured here, so changing those requires
-// a Restart to take effect. dry-run, poll interval, rid param, phish url,
+// evilginx db path, state file) is captured here, so changing those requires a
+// Restart to take effect; dry-run, poll interval, rid param, phish url,
 // user-agent and the form mapping are read live on every tick.
 func (p *Poller) Start() error {
 	p.mu.Lock()
@@ -101,34 +102,56 @@ func (p *Poller) Start() error {
 	p.state = st
 	p.loggedSkip = map[int64]bool{}
 
+	// Surface a disabled-TLS-verification setting on every start: it is easy to
+	// flip on for a lab cert and forget, and it is persisted in config.json.
+	if snap.GophishInsecureTLS && p.logf != nil {
+		p.logf("WARNING: gophish admin-API TLS verification is DISABLED (config gophish insecure true) — use only for loopback/lab certs")
+	}
+	if snap.SubmitInsecureTLS && p.logf != nil {
+		p.logf("WARNING: phish-server TLS verification is DISABLED (config submit_insecure true) — use only for loopback/lab certs")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
 	p.cancel = cancel
+	p.done = done
 	p.running = true
 	p.stats = PollerStats{Running: true, StartedAt: time.Now()}
 
-	go p.loop(ctx)
+	go p.loop(ctx, done)
 	return nil
 }
 
-// Stop halts the background loop. It is safe to call when not running.
+// Stop cancels the background loop and blocks until it has fully exited, so a
+// subsequent Start never races a still-running poll cycle. It is safe to call
+// when not running.
 func (p *Poller) Stop() {
 	p.mu.Lock()
 	cancel := p.cancel
+	done := p.done
+	wasRunning := p.running
 	p.running = false
+	p.cancel = nil
+	p.done = nil
 	p.mu.Unlock()
+
 	if cancel != nil {
 		cancel()
 	}
+	if wasRunning && done != nil {
+		<-done // wait for the in-flight cycle to finish before returning
+	}
 }
 
-// Restart re-reads connection-level config and starts fresh.
+// Restart re-reads connection-level config and starts fresh. Stop() already
+// waits for the previous loop to exit, so no arbitrary delay is needed.
 func (p *Poller) Restart() error {
 	p.Stop()
-	time.Sleep(100 * time.Millisecond)
 	return p.Start()
 }
 
-func (p *Poller) loop(ctx context.Context) {
+func (p *Poller) loop(ctx context.Context, done chan struct{}) {
+	defer close(done)
 	// first poll immediately, then on the interval
 	for {
 		p.poll()
@@ -151,8 +174,8 @@ func (p *Poller) setErr(format string, args ...interface{}) {
 	}
 }
 
-// poll runs one scan/forward cycle. It mirrors the original pollOnce logic,
-// reading per-session-sensitive config live from a fresh snapshot.
+// poll runs one scan-and-forward cycle, reading the per-tick config live from a
+// fresh snapshot so dry-run, interval and mapping changes apply without a restart.
 func (p *Poller) poll() {
 	snap := p.cfg.Snapshot()
 	dryRun := p.cfg.IsDryRun()
@@ -221,8 +244,9 @@ func (p *Poller) poll() {
 		}
 
 		if dryRun {
-			p.logf("[DRY RUN] would POST to %s?%s=%s recipient=%s campaign=%d fields=%v",
-				postTarget, snap.RidQueryParam, rid, loc.Result.Email, loc.CampaignID, fields)
+			p.logf("[DRY RUN] would POST to %s?%s=%s recipient=%s campaign=%d fields=%s",
+				postTarget, snap.RidQueryParam, rid, redactEmail(loc.Result.Email, snap.LogPlaintext),
+				loc.CampaignID, redactFields(fields, snap.LogPlaintext))
 			p.mu.Lock()
 			p.stats.DryRunHits++
 			p.mu.Unlock()
@@ -236,7 +260,7 @@ func (p *Poller) poll() {
 				continue
 			}
 			p.logf("session %d: forwarded capture for recipient %s into campaign %d",
-				sess.ID, loc.Result.Email, loc.CampaignID)
+				sess.ID, redactEmail(loc.Result.Email, snap.LogPlaintext), loc.CampaignID)
 			p.mu.Lock()
 			p.stats.Forwarded++
 			p.mu.Unlock()
@@ -264,7 +288,7 @@ func (p *Poller) bumpSkipped() {
 	p.mu.Unlock()
 }
 
-// --- helpers (moved out of the old main.go) --------------------------
+// --- correlation and form-building helpers ---------------------------
 
 func extractRID(landingURL, param string) string {
 	if landingURL == "" {

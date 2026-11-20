@@ -94,6 +94,7 @@ Type `help` for the full command reference.
 | `config poll <seconds>` | re-scan interval |
 | `config rid_param <name>` | tracking param name (default `rid`) |
 | `config mapping <field> <tmpl>` | map a gophish form field → capture template (empty tmpl removes it) |
+| `config log_plaintext true\|false` | write captured creds/emails to logs in cleartext (default **off** = redacted) |
 | `dryrun on\|off` | simulate vs actually inject |
 | `test` | verify gophish reachability + API key |
 | `sessions` | list sessions currently in `data.db` |
@@ -142,12 +143,39 @@ systemctl enable --now evilphish
 journalctl -u evilphish -f
 ```
 
-> The journal/log output contains captured plaintext credentials. Restrict
-> read access to it like any other part of the engagement's capture chain,
-> and keep `config.json` at `chmod 600` (the tool writes it that way).
+> **Logs are redacted by default.** Captured credentials and recipient emails
+> are masked in all log output (e.g. `password=<8 chars>`, `j***@corp.tld`), so
+> the systemd journal does not become an uncontrolled second copy of the
+> engagement's captures. You still see enough to confirm the pipeline works, and
+> the `sessions` command shows full captured data on demand to your own
+> terminal. If you deliberately need raw values in the log, set
+> `config log_plaintext true` (or `"log_plaintext": true` in `config.json`) — and
+> then restrict the journal accordingly. Keep `config.json` at `chmod 600` (the
+> tool writes it that way, atomically).
 
 Other flags: `./evilphish -dump-schema` (parse `data.db`, print a summary,
 exit) and `./evilphish --version`.
+
+---
+
+## Operational hygiene
+
+evilphish is meant to run on a dedicated operator host, so the main risk it
+guards against is its own capture trail outliving the engagement or being read
+off the box in a blue-team turnaround:
+
+- **Redacted logs by default** (see above); opt into cleartext only when needed.
+- **`config.json` and `bridge-state.json` are written `0600` and atomically**, so
+  a crash can't leave a half-written API key or a torn idempotency state (which
+  would otherwise re-inject already-forwarded captures into gophish).
+- **Disabled TLS verification is re-announced on every `start`.** `insecure` /
+  `submit_insecure` are persisted, so the forwarder warns you each time it runs
+  with cert checking off, to keep a lab setting from silently going live.
+- **Post-engagement cleanup.** When the assessment ends, remove the capture
+  trail: `bridge-state.json`, `config.json` (holds the API key), and the log
+  sink — for a systemd unit, `journalctl --rotate && journalctl --vacuum-time=1s`
+  (or vacuum the unit's journal). evilginx's own `data.db` is the authoritative
+  capture store and is managed on the evilginx side.
 
 ---
 
@@ -205,6 +233,7 @@ service. See `test-rig/README.md`.
 - `terminal.go` — interactive console (readline) + config commands
 - `poller.go` — background forwarder (start/stop), rid correlation, forwarding
 - `config.go` — thread-safe settings + auto-save
+- `security.go` — credential-safe log redaction + atomic file writes
 - `table.go` — console tables (adapted from evilginx/bettercap, GPLv3)
 - `gophish.go` — gophish admin API client + GET/POST into the phish server
 - `evilginx.go` — read-only RESP/AOF parser for evilginx's `data.db`

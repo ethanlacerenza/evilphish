@@ -63,16 +63,20 @@ type GophishClient struct {
 	ridIndex    map[string]ridLocation
 	lastRefresh time.Time
 	cacheTTL    time.Duration
+
+	refreshMu sync.Mutex // serializes refreshIndex so concurrent misses coalesce
 }
 
 func NewGophishClient(s Settings) *GophishClient {
 	apiTransport := &http.Transport{}
 	if s.GophishInsecureTLS {
-		apiTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec - operator opt-in for self-signed lab certs
+		// #nosec G402 -- explicit operator opt-in for a self-signed gophish admin cert.
+		apiTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 	submitTransport := &http.Transport{}
 	if s.SubmitInsecureTLS {
-		submitTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec - same, for the phishing-facing cert
+		// #nosec G402 -- explicit operator opt-in for a self-signed phish-server cert.
+		submitTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
 	ttl := time.Duration(s.CampaignCacheSeconds) * time.Second
@@ -117,7 +121,23 @@ func (g *GophishClient) Test() (int, error) {
 	return len(campaigns), nil
 }
 
+// refreshIndex rebuilds the rid -> campaign/recipient map from gophish's admin
+// API. It costs one call to list campaigns plus one per campaign, so it is
+// serialized and coalesced: if another caller already refreshed while this one
+// waited for the lock, and the cache is still fresh, it returns without
+// repeating the sweep. This bounds the API load to roughly one refresh per
+// cacheTTL even under a burst of new captures.
 func (g *GophishClient) refreshIndex() error {
+	g.refreshMu.Lock()
+	defer g.refreshMu.Unlock()
+
+	g.mu.Lock()
+	fresh := len(g.ridIndex) > 0 && time.Since(g.lastRefresh) <= g.cacheTTL
+	g.mu.Unlock()
+	if fresh {
+		return nil
+	}
+
 	var campaigns []Campaign
 	if err := g.apiGet("/api/campaigns/", &campaigns); err != nil {
 		return err

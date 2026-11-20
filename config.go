@@ -23,12 +23,11 @@ import (
 	"time"
 )
 
-// Settings holds every tunable for the bridge. It is the serializable part
-// of the configuration (loaded from / saved to a JSON file). Everything that
-// used to be edited by hand in config.json is now editable at runtime from
-// the interactive shell (see terminal.go), which writes the file back
-// automatically on every change — the JSON file is just the persistence
-// layer now, not something you normally touch by hand.
+// Settings holds every tunable for the bridge and is the serializable part of
+// the configuration, loaded from and saved to a JSON file. Every field is also
+// editable at runtime from the interactive shell (see terminal.go), which
+// persists the file on each change; the JSON file is the persistence layer,
+// not something an operator normally edits by hand.
 type Settings struct {
 	// --- evilginx side -----------------------------------------------
 	EvilginxDBPath string `json:"evilginx_db_path"` // e.g. /root/.evilginx/data.db
@@ -50,6 +49,12 @@ type Settings struct {
 
 	SubmitUserAgentFallback string `json:"submit_user_agent_fallback"`
 	SubmitInsecureTLS       bool   `json:"submit_insecure_tls"`
+
+	// LogPlaintext, when true, writes captured credentials and recipient
+	// emails to the log in cleartext. The default (false) redacts them, so the
+	// log — in particular the systemd journal under headless use — does not
+	// become an uncontrolled second copy of the engagement's captures.
+	LogPlaintext bool `json:"log_plaintext"`
 
 	// --- bookkeeping -------------------------------------------------
 	StateFilePath string `json:"state_file_path"`
@@ -108,8 +113,9 @@ func LoadConfig(path string) (*Config, error) {
 	return c, nil
 }
 
-// Ready reports whether the minimum required fields are set to actually run
-// the bridge. Used to warn the user instead of crashing on startup.
+// Ready reports whether the minimum required fields are set to run the bridge,
+// and returns the names of any that are missing so the caller can warn the
+// operator instead of crashing on startup.
 func (c *Config) Ready() (bool, []string) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -139,7 +145,8 @@ func (c *Config) Snapshot() Settings {
 	return cp
 }
 
-// Save writes the current settings back to disk (0600).
+// Save writes the current settings back to disk at mode 0600, atomically, so a
+// crash mid-write cannot leave a truncated config (which holds the API key).
 func (c *Config) Save() error {
 	c.mu.RLock()
 	b, err := json.MarshalIndent(c.s, "", "  ")
@@ -148,7 +155,7 @@ func (c *Config) Save() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, b, 0o600)
+	return atomicWriteFile(path, b, 0o600)
 }
 
 func (c *Config) Path() string { c.mu.RLock(); defer c.mu.RUnlock(); return c.path }
@@ -212,6 +219,9 @@ func (c *Config) SetSubmitUserAgent(v string) error {
 }
 func (c *Config) SetCampaignCache(sec int) error {
 	return c.setAndSave(func(s *Settings) { s.CampaignCacheSeconds = sec })
+}
+func (c *Config) SetLogPlaintext(v bool) error {
+	return c.setAndSave(func(s *Settings) { s.LogPlaintext = v })
 }
 
 // SetFormField sets (or, with empty value, deletes) one form-field mapping.
