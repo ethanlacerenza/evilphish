@@ -20,6 +20,12 @@ jobs:
   test:
     name: Lint & test
     runs-on: ubuntu-latest
+    # -mod=mod lets the go tool fetch and record checksums on the fly, so the
+    # pipeline is green even before go.sum is committed. Recommended next step:
+    # run `go mod tidy` locally, commit go.sum, then you can drop this and turn
+    # setup-go's cache back on for reproducible, checksum-verified builds.
+    env:
+      GOFLAGS: -mod=mod
     steps:
       - uses: actions/checkout@v4
 
@@ -28,10 +34,9 @@ jobs:
         with:
           go-version-file: go.mod
           check-latest: true
+          cache: false # module cache keying needs go.sum, which isn't committed yet
 
-      # Generates go.sum if it is not committed yet, and warms the module cache.
-      # Recommended: commit go.sum (run `go mod tidy` locally) for reproducible,
-      # checksum-verified builds.
+      # Resolves modules and writes go.sum entries (thanks to -mod=mod).
       - name: Download modules
         run: go mod download
 
@@ -69,12 +74,14 @@ jobs:
       CGO_ENABLED: 0
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
+      GOFLAGS: -mod=mod
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           check-latest: true
+          cache: false
       - run: go mod download
       - name: Cross-compile (sanity)
         run: go build -trimpath -o /dev/null ./...

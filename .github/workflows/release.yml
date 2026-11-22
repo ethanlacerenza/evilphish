@@ -34,6 +34,7 @@ jobs:
       CGO_ENABLED: 0
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
+      GOFLAGS: -mod=mod # fetch + record checksums on the fly until go.sum is committed
     steps:
       - uses: actions/checkout@v4
 
@@ -41,6 +42,7 @@ jobs:
         with:
           go-version-file: go.mod
           check-latest: true
+          cache: false
 
       - run: go mod download
 
