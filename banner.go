@@ -22,7 +22,13 @@ import (
 	"github.com/fatih/color"
 )
 
-const VERSION = "2.0.0"
+// VERSION is the build version. It defaults to the embedded value for local
+// builds and is overridden at release time via the linker:
+//
+//	go build -ldflags "-X main.VERSION=v1.0.1"
+//
+// It is a var (not a const) precisely so -ldflags -X can set it.
+var VERSION = "1.0.0"
 
 // sharkPix is a pixel grid traced from the evilphish logo. It is rendered with
 // half-block characters (two pixel rows per text line) for high fidelity, so
