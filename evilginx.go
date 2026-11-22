@@ -69,25 +69,50 @@ type SessionSource interface {
 }
 
 // ---------------------------------------------------------------------
-// RESPAOFSource: evilginx3's data.db turned out NOT to be sqlite or
-// BoltDB — it's a Redis-protocol (RESP) append-only log of SET/DEL
-// commands, e.g.:
+// RESPAOFSource reads evilginx3's data.db, which is a Redis-protocol (RESP)
+// append-only log of SET/DEL commands rather than a sqlite or BoltDB file,
+// e.g.:
 //
 //   *3\r\n$3\r\nset\r\n$12\r\nsessions:135\r\n$467\r\n{"id":135,...}\r\n
 //
-// Each evilginx session is stored under key "sessions:<id>" as a JSON
-// blob; "sessions:0:id" is an internal id counter, not a session. We
-// replay the whole log (it's small) on every poll, keep only the latest
-// SET per key (last-write-wins, with DEL removing a key), and parse the
-// surviving "sessions:<id>" blobs as JSON. This never writes to the file.
+// Each evilginx session is stored under key "sessions:<id>" as a JSON blob;
+// "sessions:0:id" is an internal id counter, not a session. The whole log is
+// small, so on every poll it is replayed in full, keeping only the latest SET
+// per key (last-write-wins, with DEL removing a key), and the surviving
+// "sessions:<id>" blobs are parsed as JSON. The file is only ever read.
 // ---------------------------------------------------------------------
+
+const (
+	// maxBulkStringBytes caps a single RESP bulk payload. A length field read
+	// from a corrupt or externally truncated data.db must not drive an
+	// unbounded allocation; a legitimate evilginx session blob is a few KiB.
+	maxBulkStringBytes = 32 << 20 // 32 MiB
+
+	// maxDBFileBytes caps the whole file read into the parser, a defence
+	// against pointing the bridge at an unexpectedly huge or wrong file.
+	maxDBFileBytes = 512 << 20 // 512 MiB
+)
 
 type RESPAOFSource struct {
 	Path string
 }
 
-func NewRESPAOFSource(cfg Config) *RESPAOFSource {
-	return &RESPAOFSource{Path: cfg.EvilginxDBPath}
+// openDBFile opens the data.db for reading and rejects a file larger than
+// maxDBFileBytes before any parsing begins.
+func openDBFile(path string) (*os.File, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	if fi, serr := f.Stat(); serr == nil && fi.Size() > maxDBFileBytes {
+		f.Close()
+		return nil, fmt.Errorf("%s is %d bytes, over the %d-byte safety limit for a RESP/AOF log", path, fi.Size(), int64(maxDBFileBytes))
+	}
+	return f, nil
+}
+
+func NewRESPAOFSource(dbPath string) *RESPAOFSource {
+	return &RESPAOFSource{Path: dbPath}
 }
 
 var sessionKeyRe = regexp.MustCompile(`^sessions:(\d+)$`)
@@ -142,6 +167,9 @@ func readRESPCommands(r io.Reader) ([][]string, error) {
 			if err != nil || length < 0 {
 				return commands, fmt.Errorf("bad RESP bulk length in %q", lenLine)
 			}
+			if length > maxBulkStringBytes {
+				return commands, fmt.Errorf("RESP bulk length %d exceeds the %d-byte limit", length, maxBulkStringBytes)
+			}
 			buf := make([]byte, length)
 			if _, err := io.ReadFull(br, buf); err != nil {
 				truncated = true
@@ -190,7 +218,7 @@ func replaySessionState(commands [][]string) map[int64]string {
 }
 
 func (s *RESPAOFSource) DumpSchema() (string, error) {
-	f, err := os.Open(s.Path)
+	f, err := openDBFile(s.Path)
 	if err != nil {
 		return "", err
 	}
@@ -229,16 +257,16 @@ func (s *RESPAOFSource) DumpSchema() (string, error) {
 }
 
 // FetchNewSessions returns the current state of every session in the log.
-// sinceID is intentionally NOT used to filter rows here: evilginx updates
-// the same "sessions:<id>" entry in place over time (first the landing
-// visit with empty credentials, later the same id with username/password
-// filled in), so filtering by id would permanently skip an id the moment
-// it's first seen empty, even once it's later updated with real
-// credentials. The file is small, so re-parsing it in full on every poll
-// is cheap; de-duplication is handled by the caller via per-session
-// update_time tracking instead (see state.go / main.go).
+// sinceID is intentionally not used to filter rows: evilginx updates the same
+// "sessions:<id>" entry in place over time (first the landing visit with empty
+// credentials, later the same id with username/password filled in), so
+// filtering by id would permanently skip an id the moment it is first seen
+// empty, even once it is later updated with real credentials. The file is
+// small, so re-parsing it in full on every poll is cheap; de-duplication is
+// handled by the caller via per-session update_time tracking (see poller.go
+// and state.go).
 func (s *RESPAOFSource) FetchNewSessions(sinceID int64) ([]Session, error) {
-	f, err := os.Open(s.Path)
+	f, err := openDBFile(s.Path)
 	if err != nil {
 		return nil, err
 	}

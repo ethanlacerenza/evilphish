@@ -1,10 +1,12 @@
 {
+  "_comment": "OPTIONAL. evilphish v2 is configured from inside the interactive shell (run ./evilphish, then use the 'config' commands) and writes this file for you. This template is only a starting point / for headless (systemd) use.",
+
   "evilginx_db_path": "/root/.evilginx/data.db",
 
   "poll_interval_seconds": 5,
   "rid_query_param": "rid",
 
-  "gophish_api_base_url": "http://127.0.0.1:3332",
+  "gophish_api_base_url": "http://127.0.0.1:3333",
   "gophish_api_key": "PUT-YOUR-GOPHISH-API-KEY-HERE",
   "gophish_insecure_tls": false,
   "campaign_cache_seconds": 30,

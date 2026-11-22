@@ -54,13 +54,10 @@ func randomToken() string {
 	return hex.EncodeToString(b)
 }
 
-func main() {
-	addr := flag.String("addr", ":8443", "listen address")
-	certFile := flag.String("cert", "cert.pem", "TLS certificate (ignored with -plain-http)")
-	keyFile := flag.String("key", "key.pem", "TLS private key (ignored with -plain-http)")
-	plainHTTP := flag.Bool("plain-http", false, "serve plain HTTP instead of TLS (use this when Caddy/another reverse proxy terminates TLS for you)")
-	flag.Parse()
-
+// newMux builds the fake target's HTTP routes. It is split out of main() so the
+// exact same handlers can be exercised in-process by the test suite via
+// httptest, without opening a socket or spawning the binary.
+func newMux() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
@@ -102,6 +99,18 @@ func main() {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusFound)
 	})
+
+	return mux
+}
+
+func main() {
+	addr := flag.String("addr", ":8443", "listen address")
+	certFile := flag.String("cert", "cert.pem", "TLS certificate (ignored with -plain-http)")
+	keyFile := flag.String("key", "key.pem", "TLS private key (ignored with -plain-http)")
+	plainHTTP := flag.Bool("plain-http", false, "serve plain HTTP instead of TLS (use this when Caddy/another reverse proxy terminates TLS for you)")
+	flag.Parse()
+
+	mux := newMux()
 
 	if *plainHTTP {
 		log.Printf("fake lab target listening on %s (plain HTTP, expecting Caddy/a proxy in front)", *addr)
